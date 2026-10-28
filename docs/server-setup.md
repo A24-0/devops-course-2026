@@ -54,3 +54,14 @@ TCP, адрес хоста 127.0.0.1, порт хоста 2222, порт гос�
 - Применение конфигурации: sudo nginx -t && sudo systemctl reload nginx
 - Доверие клиента: сертификат копируется на хост (scp devops:/etc/ssl/certs/devops.crt ~/devops.crt), проверка curl --cacert ~/devops.crt
 - Снимок состояния: 04-nginx-https
+
+## 9. Контейнеризация
+- Установка: Docker Engine из официального репозитория download.docker.com (docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin); версия: Docker version 29.9.2, build a82e528
+- Группа docker: участник devops (имеет право sudo); добавление: sudo usermod -aG docker devops; включение в группу учётных записей без права sudo недопустимо, так как членство в группе docker эквивалентно праву root
+- Проект: ~/app на сервере (доставка с хоста: rsync -avz --delete --exclude=.env app/ devops:app/); сервисы db (postgres:16-alpine) и app (образ devops-app:1.0, процесс gunicorn от пользователя app)
+- Файл .env: ~/app/.env, права 600, пароль СУБД сформирован openssl rand -hex 16; в репозиторий не добавляется (.gitignore), шаблон – app/.env.example
+- Публикуемые порты: 127.0.0.1:5000 -> контейнер app:5000 (только локальный адрес); порт СУБД 5432 не публикуется, приложение обращается к db по имени в сети backend
+- Именованные тома: db_data (проектный том app_db_data) для данных PostgreSQL; docker compose down -v удаляет данные
+- Обратный прокси-сервер: в блоке HTTPS /etc/nginx/sites-available/devops-site добавлен location /app/ { proxy_pass http://127.0.0.1:5000/; } с заголовками Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto; статический ресурс сохранён
+- Сборка образов выполняется с сетью хоста (docker build --network host: слои попадают в кэш, поэтому в docker compose образ берётся уже собранный (up --no-build): сборка внутри compose идёт через bake без сети хоста и pip не может скачать пакеты; в docker-compose.yml параметр network не задаётся, иначе bake требует --allow=network.host): UDP-запросы DNS из контейнеров через NAT гипервизора не проходят, а резолвер ВМ работает по DNS поверх TLS
+- Снимок состояния: 05-docker-compose
