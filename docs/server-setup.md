@@ -38,3 +38,19 @@ TCP, адрес хоста 127.0.0.1, порт хоста 2222, порт гос�
 2026-10-28 01:39  02-keys-configured
 2026-10-28 01:41  forward guest port 22 -> 2222
 2026-10-28 01:43  03-ssh-hardened
+
+## 8. Веб-сервер
+- Пакет: nginx (Ubuntu 24.04, из репозитория дистрибутива); служба nginx включена в автозапуск
+- Конфигурация ресурса: /etc/nginx/sites-available/devops-site, активирована ссылкой в /etc/nginx/sites-enabled/; стандартный ресурс default отключён (ссылка удалена)
+- Блок 1: порт 80, server_name devops.local, return 301 на https://$host$request_uri
+- Блок 2: порт 443 ssl (IPv4 и IPv6), TLSv1.2 и TLSv1.3, root /var/www/devops-site, index index.html, error_page 404 /404.html
+- Журналы: /var/log/nginx/devops-site.access.log и /var/log/nginx/devops-site.error.log
+- Каталог ресурса: /var/www/devops-site, владелец devops:devops, права 755 для каталога и 644 для файлов (модель «владелец пишет, веб-сервер читает»); содержимое доставляется сценарием scripts/deploy.sh (rsync -avz --delete, права D755/F644 задаются в промежуточной копии: rsync macOS не поддерживает --chmod)
+- Сертификат: /etc/ssl/certs/devops.crt, права 644; закрытый ключ: /etc/ssl/private/devops.key, права 600, владелец root
+- Команда формирования сертификата (срок действия 365 дней, поле SAN):
+  sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/devops.key -out /etc/ssl/certs/devops.crt -subj "/CN=devops.local" -addext "subjectAltName=DNS:devops.local"
+- Правила ufw: порты 80/tcp и 443/tcp разрешены ещё в ПР № 5, новых правил не добавлялось
+- Заголовок HSTS не применяется (самоподписанный сертификат)
+- Применение конфигурации: sudo nginx -t && sudo systemctl reload nginx
+- Доверие клиента: сертификат копируется на хост (scp devops:/etc/ssl/certs/devops.crt ~/devops.crt), проверка curl --cacert ~/devops.crt
+- Снимок состояния: 04-nginx-https
