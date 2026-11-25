@@ -65,3 +65,15 @@ TCP, адрес хоста 127.0.0.1, порт хоста 2222, порт гос�
 - Обратный прокси-сервер: в блоке HTTPS /etc/nginx/sites-available/devops-site добавлен location /app/ { proxy_pass http://127.0.0.1:5000/; } с заголовками Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto; статический ресурс сохранён
 - Сборка образов выполняется с сетью хоста (docker build --network host: слои попадают в кэш, поэтому в docker compose образ берётся уже собранный (up --no-build): сборка внутри compose идёт через bake без сети хоста и pip не может скачать пакеты; в docker-compose.yml параметр network не задаётся, иначе bake требует --allow=network.host): UDP-запросы DNS из контейнеров через NAT гипервизора не проходят, а резолвер ВМ работает по DNS поверх TLS
 - Снимок состояния: 05-docker-compose
+
+## 10. Ansible
+- Расположение проекта: ansible/ в репозитории devops-course-2026 (ветка feature/ansible); запуск выполняется из каталога ansible, файл ansible.cfg содержит inventory = inventory/prod.ini и force_handlers = True
+- Управляющий узел: хостовая система macOS 15.7.3 (Apple M4), Ansible core 2.22.0, sshpass 1.10; управляемый узел: Ubuntu Server 24.04.5 LTS (arm64) под QEMU вместо VirtualBox (Apple Silicon), имя узла devops-vm, адрес 10.0.2.15 за NAT гипервизора, доступ с хоста через проброс порта 127.0.0.1:2222 -> 22 и 127.0.0.1:8080 -> 80
+- Inventory: inventory/bootstrap.ini — учётная запись student, первичный доступ по ключу (ssh-copy-id выполнен заранее), повышение прав через --ask-become-pass; inventory/prod.ini — учётная запись devops, ключ ~/.ssh/devops_vm, неинтерактивный запуск
+- Роли: base (проверка платформы, базовые пакеты, python3-debian и python3-requests, официальный репозиторий Docker, Docker Engine), ssh (пользователь devops, authorized_keys, sudoers NOPASSWD, hardening SSH в 00-ansible-hardening.conf, UFW), nginx (пакет, reverse proxy из шаблона, отключение default site, включение ресурса, handlers nginx -t и reload), app (образ по SHA, контейнер, проверка /health)
+- Адрес образа GHCR: ghcr.io/a24-0/devops-ci-app; выбранный тег: 3eb57336df114cb7262f5e1cb5a2895a582da590 (полный SHA последнего зелёного коммита ПР № 10); пакет публичный, аутентификация чтения не требуется
+- Порт контейнера: 5000, публикуется только на 127.0.0.1:5000 (обход Nginx исключён); внешний вход — Nginx на 80/tcp; health endpoint: /health (ожидается 200 и {"status": "ok"})
+- Первичный запуск: ANSIBLE_BECOME_PASS='<пароль student>' ansible-playbook -i inventory/bootstrap.ini site.yml
+- Повторный запуск: ansible-playbook site.yml
+- Read-only аудит: ansible-playbook verify.yml
+- Пароли и закрытый ключ в документ не включаются
